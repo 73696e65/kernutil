@@ -10,7 +10,9 @@ make kernutil-arm64  # arm64 build, probably you need jtool to sign the entitlem
 make kernutil        # fat binary
 ```
 
-## Examples of R/W from/to BSS section:
+## Examples
+
+### R/W from/to BSS section:
 
 ```
 $ sudo ./kernutil -m read -l 0x8000000 -a 0xffffff80001961a3 -c 10
@@ -27,7 +29,7 @@ $ sudo ./kernutil -m write -l 0x8000000 -a 0xffffff80001961a3 < test.bin
 $ echo -ne "\xde\xad\xbe\xef\x13\x37" | sudo ./kernutil -m write -l 0x8000000 -a 0xffffff80001961a3
 ```
 
-Resolving symbols:
+### Resolving symbols:
 
 ```
 $ sudo ./kernutil -v -m read -l 0x8000000 -s _mac_policy_list -w 4444448 -c 1
@@ -41,7 +43,7 @@ $ sudo ./kernutil -v -m read -l 0x8000000 -s _mac_policy_list -w 4444448 -c 1
 [0xffffff8008bfcb50]: 0xffffff800e779000
 ```
 
-Reading the `_sysent` structure with the custom array format:
+### Reading the `_sysent` structure with the custom array format:
 
 ```
 $ sudo ./kernutil -m read -l 0x8000000 -a 0xFFFFFF8000C48090 -w :88422 -c 3
