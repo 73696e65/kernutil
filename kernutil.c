@@ -28,7 +28,7 @@ static void usage(char *argv0)
     LOG("Usage: "
         "%s -m <read|write> <-a address|-s symbol> [-l kslide] [-i size] [-c count]\n"
         "    -m <mode>      read or write (from|to) the kernel memory.\n"
-        "    -s <symbol>    symbol used for the specified mode.\n"
+        "    -s <symbol>    symbol used for the specified mode (macOS only).\n"
         "    -a <address>   address used for the specified mode, in the hex format.\n"
         "    -l <offset>    add kslide (or arbitrary positive offset) to this address.\n"
         "    -c <count>     count of bytes or numbers (for -i) to read. default: 8\n"
@@ -113,6 +113,8 @@ int main(int argc, char *argv[])
                 ERR("You can specify only -a or -s, not both.");
 
             km = map_file(KERNEL_PATH);
+            if (!km)
+                ERR("Resolving symbols works only on macOS");
             uint64_t _addr = find_symbol_address(km, optarg);
             kaddr += _addr;
             mode |= m_SYMBOL;
