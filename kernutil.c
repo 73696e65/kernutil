@@ -9,7 +9,6 @@
 #include <sys/uio.h>
 
 #include <mach/mach.h>      // kern_return_t
-// #include <mach/mach_vm.h>   // mach_vm_read_overwrite
 
 #include "helper.h"
 
