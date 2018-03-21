@@ -23,18 +23,19 @@
 #define m_CUSTOM   (1<<5)
 
 /* Standard Usage Info */
-static void usage(char *argv0)
+static void 
+usage(char *argv0)
 {
     LOG("Usage: "
-        "%s -m <read|write> <-a address|-s symbol> [-l kslide] [-i size] [-c count]\n"
+        "%s -m <read|write> <-a address|-s symbol> [-l kslide] [-w format] [-c count]\n"
         "    -m <mode>      read or write (from|to) the kernel memory.\n"
         "    -s <symbol>    symbol used for the specified mode (macOS only).\n"
         "    -a <address>   address used for the specified mode, in the hex format.\n"
         "    -l <offset>    add kslide (or arbitrary positive offset) to this address.\n"
-        "    -c <count>     count of bytes or numbers (for -i) to read. default: 8\n"
+        "    -c <count>     count of bytes or numbers (for -w) to read. default: 8\n"
         "    -w             use custom format for printing unsigned numbers interpretation.\n"
-        "                   width could be: 1 (byte), 2 (word) 4 (dword) or 8 (qword).\n"
-        "                   example: -w \"1448\". to print the delimiter (for arrays),\n"
+        "                   width could be: s (string) 1 (byte), 2 (word) 4 (dword) or 8 (qword).\n"
+        "                   example: -w \"144s\". to print the delimiter (for arrays),\n"
         "                   use ':' as the first character.\n"
         "    -v             verbose mode.\n\n"
         "Examples for reading:\n"
@@ -42,17 +43,19 @@ static void usage(char *argv0)
         "    sudo %s -m read -l 0x8000000 -a 0xffffff80001961a3 -c 10\n"
         "    sudo %s -m read -l 0x8000000 -a 0xFFFFFF8000C48090 -w :88422 -c 100\n"
         "    sudo %s -v -m read -l 0x8000000 -s _mac_policy_list -w 4444448 -c 1\n"
-        "\n"
+        "    sudo %s -m read -a 0xffffff7f892664b8 -c 1 -w :ss8"
+        "\n\n"
         "Examples for writing:\n"
         "    echo -ne \"\\xde\\xad\\xbe\\xef\\x13\\x37\" | sudo %s -m write -l 0x8000000 -a 0xffffff80001961a3\n"
         "    echo -ne \"\\xc0\\xde\" > test.bin; sudo %s -m write -l 0x8000000 -a 0xffffff80001961a3 < test.bin\n"
         "    python -c 'from sys import stdout; stdout.write(\"\\x41\" * 6)' | sudo %s -m write -l 0x8000000 -a 0xffffff80001961a3\n"
         "\n"
-        , argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0);
+        , argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0);
     exit(1);
 }
 
-int main(int argc, char *argv[])
+int 
+main(int argc, char *argv[])
 {
 
     int opt;
@@ -143,10 +146,17 @@ int main(int argc, char *argv[])
             size_t length = strlen((const char *) format);
             for (int i = 0; i < length; i++)
             {
+                /* Interpret 's' as a 8-byte pointer to a string */
+                if (format[i] == 's')
+                {
+                    format_size += 8;
+                    continue;
+                }
+                /* Numerical outputs */
                 uint8_t w = format[i] - 0x30;
                 if (w != 1 && w != 2 && w != 4 && w != 8)
                 {
-                    ERR("Invalid number specified. Only 1, 2, 4 or 8 allowed.");
+                    ERR("Invalid number specified. Only s, 1, 2, 4 or 8 allowed.");
                 }
                 format_size += w;
             }
@@ -203,34 +213,44 @@ int main(int argc, char *argv[])
                 if (delimiter) LOG("----------------------------------\n");
                 for (int i = 0; i < length; i++)
                 {
-                    uint8_t w = format[i] - 0x30;
+                    uint8_t w = format[i];
                     switch (w)
                     {
-                    case 1:
-                    {
-                        uint8_t x = *(uint8_t *)_addr;
-                        LOG("[0x%016llx]: 0x%02x\n", kaddr, x)
-                        break;
+                        case '1':
+                        {
+                            uint8_t x = *(uint8_t *)_addr;
+                            LOG("[0x%016llx]: 0x%02x\n", kaddr, x)
+                            break;
+                        }
+                        case '2':
+                        {
+                            uint16_t x = *(uint16_t *)_addr;
+                            LOG("[0x%016llx]: 0x%04x\n", kaddr, x)
+                            break;
+                        }
+                        case '4':
+                        {
+                            uint32_t x = *(uint32_t *)_addr;
+                            LOG("[0x%016llx]: 0x%08x\n", kaddr, x)
+                            break;
+                        }
+                        case '8':
+                        {
+                            uint64_t x = *(uint64_t *)_addr;
+                            LOG("[0x%016llx]: 0x%016llx\n", kaddr, x)
+                            break;
+                        }
+                        case 's':
+                        {
+                            uint64_t x = *(uint64_t *)_addr;
+                            void *output = kread_c_string(tfp0, x);
+                            LOG("[0x%016llx]: 0x%016llx => %s\n", kaddr, x, (char *) output);
+                            munmap(output, PAGE_SIZE);
+                            w = '8'; /* Set the same width as a 8B pointer */
+                            break;
+                        }
                     }
-                    case 2:
-                    {
-                        uint16_t x = *(uint16_t *)_addr;
-                        LOG("[0x%016llx]: 0x%04x\n", kaddr, x)
-                        break;
-                    }
-                    case 4:
-                    {
-                        uint32_t x = *(uint32_t *)_addr;
-                        LOG("[0x%016llx]: 0x%08x\n", kaddr, x)
-                        break;
-                    }
-                    case 8:
-                    {
-                        uint64_t x = *(uint64_t *)_addr;
-                        LOG("[0x%016llx]: 0x%016llx\n", kaddr, x)
-                        break;
-                    }
-                    }
+                    w = w - 0x30; /* Convert from ascii to integer */
                     _addr = (uint64_t *) ((uint8_t *) _addr + w);
                     kaddr += w;
                 }
@@ -249,7 +269,7 @@ int main(int argc, char *argv[])
         while (read(0, &x, 1))
         {
             kwrite_1B(tfp0, _addr, x);
-            _addr += 1;
+            _addr++;
         }
     }
 

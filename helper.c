@@ -1,7 +1,8 @@
 #include "helper.h"
 
 /* Dump the raw data with offset specified as the last parameter */
-void hexdump_with_offset(void *address, uint64_t length, uint64_t offset_address)
+void
+hexdump_with_offset(void *address, uint64_t length, uint64_t offset_address)
 {
     uint64_t i;
 
@@ -37,14 +38,18 @@ void hexdump_with_offset(void *address, uint64_t length, uint64_t offset_address
     printf ("  %s\n", buff);
 }
 
+
 /* Dump the raw data with the zero offset */
-void hexdump(void *address, uint64_t length)
+void
+hexdump(void *address, uint64_t length)
 {
     hexdump_with_offset(address, length, 0);
 }
 
+
 /* Try to obtain tfp0 via HSP4 */
-void obtain_tfp0(mach_port_t *addr)
+void
+obtain_tfp0(mach_port_t *addr)
 {
     host_get_special_port(mach_host_self(), HOST_LOCAL_NODE, 4, addr);
     if (*addr == 0)
@@ -53,8 +58,10 @@ void obtain_tfp0(mach_port_t *addr)
     }
 }
 
+
 /* Read size bytes from the kernel memory to uaddr buffer */
-void kread(mach_port_t tfp0, vm_address_t kaddr, vm_address_t uaddr, uint32_t size)
+void
+kread(mach_port_t tfp0, vm_address_t kaddr, vm_address_t uaddr, uint32_t size)
 {
     vm_size_t outsize;
     vm_read_overwrite(tfp0, kaddr, size, (vm_address_t) uaddr, &outsize);
@@ -63,13 +70,36 @@ void kread(mach_port_t tfp0, vm_address_t kaddr, vm_address_t uaddr, uint32_t si
             "Maybe reading too much?", size, (uint32_t) outsize);
 }
 
+
+uint8_t *
+kread_c_string(mach_port_t tfp0, vm_address_t kaddr)
+{
+    uint8_t *output = mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+    void *start = output;
+
+    /* Read the kernel memory until you find a null terminated string */
+    while (1)
+    {
+        uint32_t size = 1;
+        kread(tfp0, kaddr, (vm_address_t) output, size);
+        if (*output == 0)
+            return start;
+        kaddr++;
+        output++;
+    }
+}
+
+
 /* Store 1 byte value to the kernel memory */
-void kwrite_1B(mach_port_t tfp0, vm_address_t kaddr, uint8_t value)
+void
+kwrite_1B(mach_port_t tfp0, vm_address_t kaddr, uint8_t value)
 {
     vm_write(tfp0, kaddr, (vm_offset_t) &value, 1);
 }
 
-memory_map_t *map_file(const char *path)
+
+memory_map_t *
+map_file(const char *path)
 {
     int fd = open(path, O_RDONLY);
     if (fd < 0)
@@ -87,7 +117,8 @@ memory_map_t *map_file(const char *path)
 }
 
 
-uint64_t find_symbol_address(memory_map_t *mapping, const char *symbol_name)
+uint64_t
+find_symbol_address(memory_map_t *mapping, const char *symbol_name)
 {
     void *symbol_table = NULL, *string_table = NULL;
     uint32_t nsymbols = 0;
@@ -117,7 +148,9 @@ uint64_t find_symbol_address(memory_map_t *mapping, const char *symbol_name)
     exit(1);
 }
 
-struct load_command *find_load_command(memory_map_t *mapping, uint32_t cmd)
+
+struct load_command *
+find_load_command(memory_map_t *mapping, uint32_t cmd)
 {
     struct mach_header_64 *mh = mapping->map;
     struct load_command *lc, *flc;

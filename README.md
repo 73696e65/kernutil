@@ -32,15 +32,38 @@ $ echo -ne "\xde\xad\xbe\xef\x13\x37" | sudo ./kernutil -m write -l 0x8000000 -a
 ### Resolving symbols (macOS only):
 
 ```
-$ sudo ./kernutil -v -m read -l 0x8000000 -s _mac_policy_list -w 4444448 -c 1
-[i] reading 32 byte(s) from: 0xffffff8008bfcb38.
-[0xffffff8008bfcb38]: 0x00000004
-[0xffffff8008bfcb3c]: 0x00000200
-[0xffffff8008bfcb40]: 0x00000003
-[0xffffff8008bfcb44]: 0x00000004
-[0xffffff8008bfcb48]: 0x00000001
-[0xffffff8008bfcb4c]: 0x00000004
-[0xffffff8008bfcb50]: 0xffffff800e779000
+# check how many MAC policies are loaded and where are the entries located
+$ sudo ./kernutil-x64 -m read -l 0xf000000 -s _mac_policy_list -w 4444448 -c 1
+[0xffffff800fbfcb38]: 0x00000004
+[0xffffff800fbfcb3c]: 0x00000200
+[0xffffff800fbfcb40]: 0x00000003
+[0xffffff800fbfcb44]: 0x00000004
+[0xffffff800fbfcb48]: 0x00000001
+[0xffffff800fbfcb4c]: 0x00000004
+[0xffffff800fbfcb50]: 0xffffff80158a0000
+
+# read the policy entries
+$ sudo ./kernutil-x64 -m read -a 0xffffff80158a0000 -c 4 -w 8
+[0xffffff80158a0000]: 0xffffff7f902664b8
+[0xffffff80158a0008]: 0xffffff7f9028e0c0
+[0xffffff80158a0010]: 0xffffff7f905c2110
+[0xffffff80158a0018]: 0xffffff7f9162a010
+
+# examine the first one
+$ sudo ./kernutil-x64 -m read -a 0xffffff7f902664b8 -c 1 -w ss888
+[0xffffff7f902664b8]: 0xffffff7f90262f13 => AMFI
+[0xffffff7f902664c0]: 0xffffff7f90262f18 => Apple Mobile File Integrity
+[0xffffff7f902664c8]: 0xffffff7f902656d0
+[0xffffff7f902664d0]: 0x0000000000000001
+[0xffffff7f902664d8]: 0xffffff7f90265a40
+
+# examine the second one
+$ sudo ./kernutil-x64 -m read -a 0xffffff7f9028e0c0 -c 1 -w ss888
+[0xffffff7f9028e0c0]: 0xffffff7f902882cd => Sandbox
+[0xffffff7f9028e0c8]: 0xffffff7f9028850a => Seatbelt sandbox policy
+[0xffffff7f9028e0d0]: 0xffffff7f9028e110
+[0xffffff7f9028e0d8]: 0x0000000000000001
+[0xffffff7f9028e0e0]: 0xffffff7f9028e118
 ```
 
 ### Reading the `_sysent` structure with the custom array format:

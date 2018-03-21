@@ -45,3 +45,4 @@ void obtain_tfp0(mach_port_t *addr);
 
 void kread(mach_port_t tfp0, vm_address_t kaddr, vm_address_t uaddr, uint32_t size);
 void kwrite_1B(mach_port_t tfp0, vm_address_t kaddr, uint8_t value);
+uint8_t *kread_c_string(mach_port_t tfp0, vm_address_t kaddr);
