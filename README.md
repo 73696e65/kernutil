@@ -29,7 +29,7 @@ $ sudo ./kernutil -m write -l 0x8000000 -a 0xffffff80001961a3 < test.bin
 $ echo -ne "\xde\xad\xbe\xef\x13\x37" | sudo ./kernutil -m write -l 0x8000000 -a 0xffffff80001961a3
 ```
 
-### Resolving symbols (macOS only):
+### Resolving symbols (macOS):
 
 ```
 # check how many MAC policies are loaded and where are the entries located
