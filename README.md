@@ -74,7 +74,8 @@ $ sudo ./kernutil -m read -a 0xffffff7f895b1110 -c 1 -w ss888
 [0xffffff7f895b1128]: 0x0000000000000001
 [0xffffff7f895b1130]: 0xffffff7f895b1168
 
-$ 4)
+# 4)
+$ sudo ./kernutil -m read -a 0xffffff7f8a619010 -c 1 -w ss888
 [0xffffff7f8a619010]: 0xffffff7f8a618fd4 => TMSafetyNet
 [0xffffff7f8a619018]: 0xffffff7f8a618fe0 => Safety net for Time Machine
 [0xffffff7f8a619020]: 0xffffff7f8a619060
