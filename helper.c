@@ -144,7 +144,7 @@ find_symbol_address(memory_map_t *mapping, const char *symbol_name)
         entry = ((void *)entry + sizeof(struct nlist_64));
     }
 
-    ERR("[-] Symbol '%s' not found, quiting.", symbol_name);
+    ERR("Symbol '%s' not found, quiting.", symbol_name);
     exit(1);
 }
 
@@ -165,5 +165,33 @@ find_load_command(memory_map_t *mapping, uint32_t cmd)
         }
         lc = (struct load_command *)((uint64_t)lc + (uint64_t)lc->cmdsize);
     }
-    return 0;
+    ERR("[-] load_command '%x' not found, quiting.", cmd);
+}
+
+struct segment_command_64 *find_segment_64(struct mach_header_64 *mh, const char *segname)
+{
+    struct load_command *lc;
+    struct segment_command_64 *s;
+    lc = (struct load_command *)((uint64_t)mh + sizeof(struct mach_header_64));
+
+    for (int i = 0; i < mh->ncmds; ++i)
+    {
+        if (lc->cmd == LC_SEGMENT_64)
+        {
+            s = (struct segment_command_64 *)lc;
+            if (!strcmp(s->segname, segname))
+            {
+                return s;
+            }
+        }
+        lc = (struct load_command *)((uint64_t)lc + (uint64_t)lc->cmdsize);
+    }
+    ERR("[-] segment '%s' not found, quiting.", segname);
+}
+
+uint64_t find_kernel_base(kernel_map_t *mapping)
+{
+    struct mach_header_64 *mh = mapping->map;
+    struct segment_command_64 *text = find_segment_64(mh, SEG_TEXT);
+    return (uint64_t)text->vmaddr;
 }

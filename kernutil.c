@@ -10,34 +10,36 @@
 
 #include <mach/mach.h>      // kern_return_t
 
+#include "modes.h"
 #include "helper.h"
 
-#define KERNEL_PATH "/System/Library/Kernels/kernel"
+uint8_t  verbose   = 0;
+size_t delimiter   = 0;
 
-#define m_READ     (1<<1)
-#define m_WRITE    (1<<2)
+/*
+TODO: Implement a routine for finding kslide
+*/
 
-#define m_SYMBOL   (1<<3)
-#define m_ADDRESS  (1<<4)
-
-#define m_CUSTOM   (1<<5)
 
 /* Standard Usage Info */
-static void 
+static void
 usage(char *argv0)
 {
     LOG("Usage: "
-        "%s -m <read|write> <-a address|-s symbol> [-l kslide] [-w format] [-c count]\n"
-        "    -m <mode>      read or write (from|to) the kernel memory.\n"
-        "    -s <symbol>    symbol used for the specified mode (macOS only).\n"
-        "    -a <address>   address used for the specified mode, in the hex format.\n"
-        "    -l <offset>    add kslide (or arbitrary positive offset) to this address.\n"
+        "%s -m <read|write|kslide> <-a address|-s symbol> [-l kslide] [-w format] [-c count]\n"
+        "    -m <mode>      read, write - r/w from the kernel memory\n"
+        "                   kslide - find the kslide\n"
+        "    -s <symbol>    symbol used in r/w mode\n"
+        "    -a <address>   address used in r/w mode, in the hex format\n"
+        "    -l <offset>    add kslide (or arbitrary positive offset in hex format) to this address\n"
         "    -c <count>     count of bytes or numbers (for -w) to read. default: 8\n"
-        "    -w             use custom format for printing unsigned numbers interpretation.\n"
-        "                   width could be: s (string) 1 (byte), 2 (word) 4 (dword) or 8 (qword).\n"
-        "                   example: -w \"144s\". to print the delimiter (for arrays),\n"
-        "                   use ':' as the first character.\n"
-        "    -v             verbose mode.\n\n"
+        "    -w             use custom format for printing unsigned numbers interpretation\n"
+        "                   width could be: s (string) 1 (byte), 2 (word) 4 (dword) or 8 (qword)\n"
+        "                   example: -w \"144s\"\n"
+        "                   to print the delimiter (for arrays), use ':' as the first character\n"
+        "    -v             verbose mode\n"
+        "    -b             raw kernelbase address (without kaslr)\n"
+        "    -f             kernel image or decrypted kernelcache. default: /System/Library/Kernels/kernel\n\n"
         "Examples for reading:\n"
         "    sudo %s -m read -l 0x8000000 -s _allproc -w 8 -c 20\n"
         "    sudo %s -m read -l 0x8000000 -a 0xffffff80001961a3 -c 10\n"
@@ -54,37 +56,62 @@ usage(char *argv0)
     exit(1);
 }
 
-int 
+int
 main(int argc, char *argv[])
 {
 
     int opt;
 
-    uint8_t  mode      = 0;
-    uint64_t kaddr     = 0;
-    uint8_t  verbose   = 0;
-    uint8_t  *format   = NULL;
+    uint8_t  mode           = 0;
+    uint8_t  mode_selected  = 0;
+    uint64_t kaddr          = 0;
+    uint8_t  *format        = NULL;
 
-    size_t ptr_size    = 0;
-    size_t format_size = 0;
-    size_t delimiter   = 0;
-    size_t count       = 8;
+    size_t ptr_size         = 0;
+    size_t format_size      = 0;
+    size_t count            = 8;
 
-    kernel_map_t *km     = NULL;
+    uint64_t kernelbase     = 0;
+    char    *kernelpath     = NULL;
+    char    *symbol         = NULL;
 
-    while ((opt = getopt(argc, argv, "m:a:s:l:c:w:vh")) > 0)
+    kernel_map_t *km        = NULL;
+
+    while ((opt = getopt(argc, argv, "m:a:s:l:c:w:vhkb:f:")) > 0)
 
         switch (opt)
         {
 
+        case 'b':
+        {
+            uint64_t _addr = 0;
+            if ((_addr = strtoull(optarg, NULL, 16)) == 0 && errno == EINVAL)
+                ERR("Invalid kernelbase specified: %s", optarg);
+            kernelbase = _addr;
+            break;
+        }
+
+        case 'f':
+        {
+            kernelpath = optarg;
+            if (access(kernelpath, F_OK) == -1 )
+                ERR("File %s cannot be read", optarg);
+            break;
+        }
+
         case 'm':
         {
+            if (mode_selected == 1)
+                ERR("Only one mode can be selected.");
             if (!strcmp("read", optarg))
                 mode |= m_READ;
             else if (!strcmp("write", optarg))
                 mode |= m_WRITE;
+            else if (!strcmp("kslide", optarg))
+                mode |= m_FIND_KSLIDE;
             else
                 ERR("Invalid mode specified: %s", optarg);
+            mode_selected = 1;
             break;
         }
 
@@ -107,6 +134,7 @@ main(int argc, char *argv[])
             if ((_addr = strtoull(optarg, NULL, 16)) == 0 && errno == EINVAL)
                 ERR("Invalid kslide specified: %s", optarg);
             kaddr += _addr;
+            mode |= m_SET_KSLIDE;
             break;
         }
 
@@ -114,12 +142,7 @@ main(int argc, char *argv[])
         {
             if (mode & m_ADDRESS)
                 ERR("You can specify only -a or -s, not both.");
-
-            km = map_file(KERNEL_PATH);
-            if (!km)
-                ERR("Resolving symbols works only on macOS");
-            uint64_t _addr = find_symbol_address(km, optarg);
-            kaddr += _addr;
+            symbol = optarg;
             mode |= m_SYMBOL;
             break;
         }
@@ -160,7 +183,7 @@ main(int argc, char *argv[])
                 }
                 format_size += w;
             }
-            mode |= m_CUSTOM;
+            mode |= m_FORMAT;
             break;
         }
 
@@ -178,100 +201,57 @@ main(int argc, char *argv[])
     if (getuid() != 0)
         ERR("%s must be run as root.", argv[0]);
 
-    if ((mode & m_READ && mode & m_WRITE) || (!(mode & m_READ) && (!(mode & m_WRITE))))
-        ERR("You must select exactly one mode from <read|write>.");
-
-    if (!(mode & m_ADDRESS) && (!(mode & m_SYMBOL)))
+    /* If we are using r/w mode, we need to set the kaddr */
+    if ( (mode & m_READ || mode & m_WRITE) && !(mode & m_ADDRESS) && !(mode & m_SYMBOL) )
         ERR("You have not specified -a or -s.");
 
+    /* We cannot read the symbols in memory without kslide */
+    if (mode & m_SYMBOL && !(mode & m_SET_KSLIDE))
+        ERR("For symbol resolution (-s) you must specify the kslide.");
+
+    /* We need a valid file for a symbol resolution or
+       kslide brute force when kernelbase is not specified */
+    if (mode & m_SYMBOL || (mode & m_FIND_KSLIDE && kernelbase == 0))
+    {
+        if (kernelpath == NULL)
+            km = map_file(DEFAULT_KERNEL_PATH);
+        else
+            km = map_file(kernelpath);
+
+        if (!km)
+            ERR("Resolving symbols works only with a valid kernel path, use -f parameter.");
+        kernelbase = find_kernel_base(km);
+
+        if (verbose)
+            LOG("[i] kernelbase from file: 0x%llx.\n", kernelbase);
+    }
+
+    /* Symbol resolution */
+    if (mode & m_SYMBOL && !(mode & m_FIND_KSLIDE))
+    {
+        uint64_t _addr = find_symbol_address(km, symbol);
+        if (verbose)
+            LOG("[i] Symbol '%s' resolved at 0x%llx\n", symbol, _addr);
+        kaddr += _addr;
+    }
 
     mach_port_t tfp0 = MACH_PORT_NULL;
     obtain_tfp0(&tfp0);
 
+    if (verbose)
+        LOG("[i] tfp0 obtained\n");
+
     /* Kernel read primitive */
     if (mode & m_READ)
-    {
+        kernutil_read(tfp0, kaddr, mode, count, format, format_size);
 
-        uint32_t size_to_read = count;
+    /* Kernel write primitive */
+    if (mode & m_WRITE)
+        kernutil_write(tfp0, kaddr);
 
-        if (mode & m_CUSTOM)
-            size_to_read *= format_size;
-
-        if (verbose)
-            LOG("[i] reading %d byte(s) from: 0x%llx.\n", (uint32_t) size_to_read, kaddr);
-
-        uint64_t *uaddr = malloc(size_to_read);
-        kread(tfp0, kaddr, (vm_address_t) uaddr, size_to_read);
-
-        if (mode & m_CUSTOM)
-        {
-            uint64_t *_addr = uaddr;
-            size_t length = strlen((const char *) format);
-
-            for (int j = 0; j < count; j++)
-            {
-                if (delimiter) LOG("----------------------------------\n");
-                for (int i = 0; i < length; i++)
-                {
-                    uint8_t w = format[i];
-                    switch (w)
-                    {
-                        case '1':
-                        {
-                            uint8_t x = *(uint8_t *)_addr;
-                            LOG("[0x%016llx]: 0x%02x\n", kaddr, x)
-                            break;
-                        }
-                        case '2':
-                        {
-                            uint16_t x = *(uint16_t *)_addr;
-                            LOG("[0x%016llx]: 0x%04x\n", kaddr, x)
-                            break;
-                        }
-                        case '4':
-                        {
-                            uint32_t x = *(uint32_t *)_addr;
-                            LOG("[0x%016llx]: 0x%08x\n", kaddr, x)
-                            break;
-                        }
-                        case '8':
-                        {
-                            uint64_t x = *(uint64_t *)_addr;
-                            LOG("[0x%016llx]: 0x%016llx\n", kaddr, x)
-                            break;
-                        }
-                        case 's':
-                        {
-                            uint64_t x = *(uint64_t *)_addr;
-                            void *output = kread_c_string(tfp0, x);
-                            LOG("[0x%016llx]: 0x%016llx => %s\n", kaddr, x, (char *) output);
-                            munmap(output, PAGE_SIZE);
-                            w = '8'; /* Set the same width as a 8B pointer */
-                            break;
-                        }
-                    }
-                    w = w - 0x30; /* Convert from ascii to integer */
-                    _addr = (uint64_t *) ((uint8_t *) _addr + w);
-                    kaddr += w;
-                }
-            }
-        }
-        else
-            hexdump_with_offset(uaddr, size_to_read, kaddr);
-        free(uaddr);
-    }
-
-    if (mode & m_WRITE)   /* Kernel write primitive */
-    {
-        uint8_t x;
-        uint64_t _addr = kaddr;
-        /* Using 1 byte write is far from optimal, but for a small data sufficient */
-        while (read(0, &x, 1))
-        {
-            kwrite_1B(tfp0, _addr, x);
-            _addr++;
-        }
-    }
+    /* Find the kernel slide */
+    if (mode & m_FIND_KSLIDE)
+        kernutil_find_kslide(tfp0, kernelbase);
 
     return 0;
 }

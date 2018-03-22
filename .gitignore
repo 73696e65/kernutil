@@ -2,3 +2,4 @@ kernutil
 kernutil-arm64
 kernutil-x64
 .DS_Store
+sync*.sh
