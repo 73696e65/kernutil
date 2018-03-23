@@ -29,7 +29,7 @@ $ sudo ./kernutil -m write -l 0x8000000 -a 0xffffff80001961a3 < test.bin
 $ echo -ne "\xde\xad\xbe\xef\x13\x37" | sudo ./kernutil -m write -l 0x8000000 -a 0xffffff80001961a3
 ```
 
-### Resolving symbols (macOS):
+### Examining MACF policies (macOS):
 
 ```
 # check how many MAC policies are loaded and where are the entries located
@@ -81,6 +81,31 @@ $ sudo ./kernutil -m read -a 0xffffff7f8a619010 -c 1 -w ss888
 [0xffffff7f8a619020]: 0xffffff7f8a619060
 [0xffffff7f8a619028]: 0x0000000000000001
 [0xffffff7f8a619030]: 0xffffff7f8a619068
+
+# creating mac_policy_ops.txt for the recent kernel
+$ sed -n '/struct mac_policy_ops {/,/}/ p' ~/latest-xnu/security/mac_policy.h | sed '/^\s*$/d;1d;$d' > files/xnu-4570.41.2_mac_policy_ops.txt
+
+$ wc -l files/xnu-4570.41.2_mac_policy_ops.txt
+     335 files/xnu-4570.41.2_mac_policy_ops.txt
+
+# reading the enabled operations for AMFI
+$ paste <(sudo ./kernutil -m read -a 0xffffff7f89265a40 -c 335 -w 8) files/xnu-4570.41.2_mac_policy_ops.txt | grep -v 0x0000000000000000
+[0xffffff7f89265a70]: 0xffffff7f892602e4        mpo_cred_check_label_update_execve_t    *mpo_cred_check_label_update_execve;
+[0xffffff7f89265a98]: 0xffffff7f892602ef        mpo_cred_label_associate_t      *mpo_cred_label_associate;
+[0xffffff7f89265aa8]: 0xffffff7f8926033c        mpo_cred_label_destroy_t        *mpo_cred_label_destroy;
+[0xffffff7f89265ac0]: 0xffffff7f892603cc        mpo_cred_label_init_t           *mpo_cred_label_init;
+[0xffffff7f89265ad0]: 0xffffff7f8925ee4a        mpo_cred_label_update_execve_t      *mpo_cred_label_update_execve;
+[0xffffff7f89265b60]: 0xffffff7f8925ec6e        mpo_file_check_mmap_t           *mpo_file_check_mmap;
+[0xffffff7f89265c40]: 0xffffff7f8926107b        mpo_file_check_library_validation_t     *mpo_file_check_library_validation;
+[0xffffff7f89265de0]: 0xffffff7f892610d1        mpo_policy_initbsd_t            *mpo_policy_initbsd;
+[0xffffff7f89265df8]: 0xffffff7f89260403        mpo_proc_check_inherit_ipc_ports_t  *mpo_proc_check_inherit_ipc_ports;
+[0xffffff7f89265e40]: 0xffffff7f8925e84e        mpo_exc_action_check_exception_send_t   *mpo_exc_action_check_exception_send;
+[0xffffff7f89265e48]: 0xffffff7f8925e674        mpo_exc_action_label_associate_t    *mpo_exc_action_label_associate;
+[0xffffff7f89265e50]: 0xffffff7f8925e698        mpo_exc_action_label_populate_t     *mpo_exc_action_label_populate;
+[0xffffff7f89265e58]: 0xffffff7f8925e67a        mpo_exc_action_label_destroy_t      *mpo_exc_action_label_destroy;
+[0xffffff7f89265e60]: 0xffffff7f8925e632        mpo_exc_action_label_init_t     *mpo_exc_action_label_init;
+[0xffffff7f89265e68]: 0xffffff7f8925e7fc        mpo_exc_action_label_update_t       *mpo_exc_action_label_update;
+[0xffffff7f892663c0]: 0xffffff7f8926040b        mpo_vnode_check_signature_t     *mpo_vnode_check_signature;
 ```
 
 ### Reading the `_sysent` structure with the custom array format:
