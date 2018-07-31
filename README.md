@@ -1,6 +1,6 @@
 # kernutil
 
-This is a very simple PoC of kernel read/write instrument for iOS and macOS. To use it, you need to obtain tfp0 (from HSP4, but this could be easily changed) and a valid memory address (or KASLR leak). There are much better and sophisticated options, like [https://github.com/bazad/memctl](https://github.com/bazad/memctl) or [https://github.com/Siguza/ios-kern-utils](https://github.com/Siguza/ios-kern-utils]). My goal was to keep it simple and readable and when I will need more features, I will probably add them. The tool was tested on iOS 11.1.2 and macOS 10.13.3, it should be b/f compatible in a reasonable range.
+This is a very simple PoC of kernel read/write instrument for iOS and macOS. To use it, you need to obtain tfp0 (from HSP4, but this could be easily changed) and a valid memory address (or KASLR leak). There are much better and sophisticated options, like [https://github.com/bazad/memctl](https://github.com/bazad/memctl) or [https://github.com/Siguza/ios-kern-utils](https://github.com/Siguza/ios-kern-utils). My goal was to keep it simple and readable and when I will need more features, I will probably add them. The tool was tested on iOS 11.1.2 and macOS 10.13.3, it should be b/f compatible in a reasonable range.
 
 ## Building
 
